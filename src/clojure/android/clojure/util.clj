@@ -1,6 +1,6 @@
 (ns android.clojure.util
-  (:import [android.app.Activity]
-           [android.view.View]
+  (:import [android.app Activity]
+           [android.view View MotionEvent]
 
            [java.util.Timer]
            [java.util.TimerTask]))
@@ -27,6 +27,32 @@
                    (run []
                      (. activity runOnUiThread change-visibility)))
                 1000)))))))
+
+
+(defn make-double-tap-handler
+  ([f]
+     (make-double-tap-handler f 500))
+  ([f recognition-time]
+     (let [last-time (atom nil)]
+       (reify android.view.View$OnTouchListener
+         (^boolean onTouch [this
+                            ^View view
+                            ^MotionEvent event]
+           (cond (= MotionEvent/ACTION_DOWN (.getActionMasked event))
+                 (let [current-time (System/currentTimeMillis)]
+                   (if @last-time
+                     (if (< (java.lang.Math/abs ^long (- @last-time
+                                                         current-time))
+                            recognition-time)
+                       (do (f)
+                           (reset! last-time nil)
+                           true)
+                       (do (reset! last-time current-time)
+                           false))
+                     (do (reset! last-time current-time)
+                         false)))
+                 :else
+                 false))))))
 
 
 
