@@ -18,7 +18,7 @@ on the Surface and whose results will not be preserved."
               :name android.clojure.IndependentDrawer
               :extends android.view.SurfaceView
               :implements [android.view.SurfaceHolder$Callback]
-              :state drawer_state
+              :state state
               :init drawer-init
               :post-init drawer-post-init)
   (:import [android.content Context]
@@ -32,7 +32,8 @@ on the Surface and whose results will not be preserved."
             ConcurrentLinkedQueue
             LinkedBlockingQueue
             ThreadPoolExecutor
-            TimeUnit]))
+            TimeUnit])
+  (:use [clojure.test :only (function?)]))
 
 (defn- log
   ([msg] (android.util.Log/d "IndependentDrawer" msg))
@@ -89,85 +90,97 @@ on the Surface and whose results will not be preserved."
                        format
                        width
                        height]
-  (reset! (.drawing-bitmap ^DrawerState (.drawer_state this))
-          (if-let [orig-bmap ^Bitmap @(.drawing-bitmap ^DrawerState (.drawer_state this))]
-            (Bitmap/createScaledBitmap orig-bmap width height true)
-            (Bitmap/createBitmap width height android.graphics.Bitmap$Config/ARGB_8888)))
-  (reset! (.drawing-canvas ^DrawerState (.drawer_state this))
-          (Canvas. @(.drawing-bitmap ^DrawerState (.drawer_state this)))))
+  (let [new-bitmap ^Bitmap
+        (if-let [orig-bmap ^Bitmap @(.drawing-bitmap ^DrawerState (.state this))]
+          (Bitmap/createScaledBitmap orig-bmap width height true)
+          (Bitmap/createBitmap width height android.graphics.Bitmap$Config/ARGB_8888))]
+    (reset! (.drawing-bitmap ^DrawerState (.state this))
+            new-bitmap)
+    (reset! (.drawing-canvas ^DrawerState (.state this))
+            (Canvas. new-bitmap))))
 
 
 (declare make-drawing-thread)
 
 (defn -surfaceCreated [^android.clojure.IndependentDrawer this
                        ^SurfaceHolder holder]
-  (reset! (.surface-available? ^DrawerState (.drawer_state this)) true)
+  (reset! (.surface-available? ^DrawerState (.state this)) true)
   (let [thread ^Thread (make-drawing-thread this)]
-    (reset! (.drawing-thread ^DrawerState (.drawer_state this))
+    (reset! (.drawing-thread ^DrawerState (.state this))
             thread)
     (.start thread)))
 
 (defn -surfaceDestroyed [^android.clojure.IndependentDrawer this
                          ^SurfaceHolder holder]
-  (reset! (.surface-available? ^DrawerState (.drawer_state this)) false)
+  (reset! (.surface-available? ^DrawerState (.state this)) false)
   (loop []
     (when (not (try
-                 (.join ^Thread @(.drawing-thread ^DrawerState (.drawer_state this)))
+                 (.join ^Thread @(.drawing-thread ^DrawerState (.state this)))
                  true
                  (catch InterruptedException e
                    false)))
       (recur))))
 
 
-(defmacro with-canvas
-  "action will be executed with canvas-var bound to drawing canvas whole
-contents is stored in drawing bitmap and will be preserved between
-different actions.
+(defmacro ^{:private true} with-canvas
+  "when non-empty-action evaluates to true the action will be executed
+with canvas-var bound to drawing canvas whose contents is stored in drawing
+bitmap and will be preserved between different actions.
 
 after-action will be executed with canvas-var bounded to the
 resulting canvas with drawing-bitmap drawn on. Content of this canvas will
 not be preserved."
-  ([canvas-var surface-view action after-action]
-     `(with-canvas ~canvas-var ~surface-view ~action ~after-action nil))
-  ([canvas-var surface-view action after-action post-action]
+  ([canvas-var surface-view non-empty-action action after-action]
      `(if-let [surface-canvas# ^Canvas (.. ~surface-view (getHolder) (lockCanvas))]
         (try
-          (let [~canvas-var ^Canvas @(.drawing-canvas ^DrawerState (.drawer_state ~surface-view))]
-            ~action)
-          (.drawBitmap surface-canvas#
-                       ^Bitmap @(.drawing-bitmap ^DrawerState
-                                                 (.drawer_state ~surface-view))
-                       0.0
-                       0.0
-                       nil)
+          (when ~non-empty-action
+            (let [~canvas-var ^Canvas @(.drawing-canvas ^DrawerState (.state ~surface-view))]
+              (assert ~canvas-var "error: drawing-canvas of surface view is nil")
+              ~action)
+            (.drawBitmap surface-canvas#
+                         ^Bitmap @(.drawing-bitmap ^DrawerState
+                                                   (.state ~surface-view))
+                         0.0
+                         0.0
+                         nil))
           (let [~canvas-var ^Canvas surface-canvas#]
+            (assert ~canvas-var)
             ~after-action)
           (finally
-            ~post-action
             (.. ~surface-view (getHolder) (unlockCanvasAndPost surface-canvas#))))
         (log "Unexpected error: lockCanvas returned nil"))))
 
-(defmacro call-on-func-or-func-seq [f func-or-coll]
+(defmacro ^{:private true} call-on-func-or-func-seq [f func-or-coll]
   `(when ~func-or-coll
-     (if (seq? ~func-or-coll)
-       (dorun (map ~f ~func-or-coll))
-       (~f ~func-or-coll))))
+     (if (function? ~func-or-coll)
+       (~f ~func-or-coll)
+       (dorun (map ~f ~func-or-coll)))))
 
 (defn- ^Thread make-drawing-thread [^android.clojure.IndependentDrawer this]
-  (let [msg-queue ^ConcurrentLinkedQueue (.message-queue ^DrawerState (.drawer_state this))]
+  (let [msg-queue ^ConcurrentLinkedQueue (.message-queue ^DrawerState (.state this))]
     (Thread.
      (fn []
        (log "Drawing thread's born")
+       ;; wait while surfaceChanged will set up drawing canvas for up
        (loop []
-         (when @(.surface-available? ^DrawerState (.drawer_state this))
-           (if-let [msg (.peek msg-queue)]
+         (when-not @(.drawing-canvas ^DrawerState (.state this))
+           (Thread/sleep 25 0)
+           (recur)))
+       (log "Drawing thread's ready to draw")
+       (loop []
+         (when @(.surface-available? ^DrawerState (.state this))
+           ;; note: if exceptions happens when we're processing this message -
+           ;; let it be, it's removed from queue here and there's no other
+           ;; way around. If you try other ways around make sure they're
+           ;; correct with respect to concurrent clear-drawing-queue invokations
+           (if-let [msg (.poll msg-queue)]
              (case (msg :type)
                :plain
                (let [{:keys [actions after-actions]} msg]
                  (with-canvas canvas this
+                   (not (nil? actions))
                    (call-on-func-or-func-seq #(% canvas) actions)
-                   (call-on-func-or-func-seq #(% canvas) after-actions)
-                   (.poll msg-queue)))
+                   (call-on-func-or-func-seq #(% canvas) after-actions)))
                :animation
                ;; if type is :animation then anim-actions and anim-after-actions are
                ;; sequences of functions of two argumetns:
@@ -176,6 +189,7 @@ not be preserved."
                      msg
                      start-time (System/currentTimeMillis)]
                  (with-canvas canvas this
+                   (not (nil? anim-actions))
                    (call-on-func-or-func-seq #(% canvas 0) anim-actions)
                    (call-on-func-or-func-seq #(% canvas 0) anim-after-actions))
                  (Thread/sleep pause-time 0)
@@ -185,6 +199,7 @@ not be preserved."
                      (assert (<= 0 diff))
                      (when (< diff duration)
                        (with-canvas canvas this
+                         (not (nil? anim-actions))
                          (call-on-func-or-func-seq #(% canvas (/ diff duration))
                                                    anim-actions)
                          (call-on-func-or-func-seq #(% canvas (/ diff duration))
@@ -192,11 +207,10 @@ not be preserved."
                        (Thread/sleep pause-time 0)
                        (recur))))
                  (with-canvas canvas this
+                   (not (nil? anim-actions))
                    (call-on-func-or-func-seq #(% canvas 1) anim-actions)
                    (call-on-func-or-func-seq #(% canvas 1) anim-after-actions))
-                 (Thread/sleep pause-time 0)
-                 ;; completed action or not - remove it anyway
-                 (.poll msg-queue)))
+                 (Thread/sleep pause-time 0)))
              (Thread/sleep 100 0))
            (recur)))
        (log "Drawing thread dies"))
@@ -236,7 +250,7 @@ but take two arguments: drawing canvas and time argument from [0, 1] real interv
            (contains? #{:plain :animation} (msg :type)))
     (.add ^ConcurrentLinkedQueue
           (.message-queue ^DrawerState
-                          (.drawer_state drawer))
+                          (.state drawer))
           msg)
     (log "Error: attempt to send invalid message: %s" msg)))
 
