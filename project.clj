@@ -1,4 +1,4 @@
-(defproject android-utils/android-utils "0.3.0"
+(defproject android-utils/android-utils "0.4.0"
   :description "Various utilities for developing for Android in Clojure."
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
