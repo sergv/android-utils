@@ -240,3 +240,10 @@ but take two arguments: drawing canvas and time argument from [0, 1] real interv
           msg)
     (log "Error: attempt to send invalid message: %s" msg)))
 
+(defn clear-drawing-queue
+  "Remove all pending drawing commands from message queue."
+  [^android.clojure.IndependentDrawer drawer]
+  (.clear ^ConcurrentLinkedQueue
+          (.message-queue ^DrawerState
+                          (.state drawer))))
+
