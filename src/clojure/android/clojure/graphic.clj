@@ -4,7 +4,12 @@
 ;; email:  serg.foo@gmail.com
 
 (ns android.clojure.graphic
-  (:import [android.graphics Bitmap Canvas Color Paint Rect]))
+  (:import [android.graphics Bitmap Canvas Color Paint Rect]
+           [android.util.Log]))
+
+(defn- log
+  ([msg] (android.util.Log/d "graphic.clj" msg))
+  ([msg & args] (log (apply format msg args))))
 
 (defn color->paint
   ([argb]
