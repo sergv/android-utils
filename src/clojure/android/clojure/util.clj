@@ -13,19 +13,18 @@
                                          View/SYSTEM_UI_FLAG_LOW_PROFILE))
         timer (java.util.Timer.)]
     (dim-ui)
-    (. view
-       setOnSystemUiVisibilityChangeListener
-       (reify
-         android.view.View$OnSystemUiVisibilityChangeListener
-         (onSystemUiVisibilityChange [this global-visibility-flags]
-           (when (= 0 (bit-and global-visibility-flags
-                               View/SYSTEM_UI_FLAG_LOW_PROFILE))
-             (. timer
-                schedule
-                (proxy [java.util.TimerTask] []
-                  (run []
-                    (.runOnUiThread activity dim-ui)))
-                1000)))))))
+    (.setOnSystemUiVisibilityChangeListener
+     view
+     (reify
+       android.view.View$OnSystemUiVisibilityChangeListener
+       (onSystemUiVisibilityChange [this global-visibility-flags]
+         (when (= 0 (bit-and global-visibility-flags
+                             View/SYSTEM_UI_FLAG_LOW_PROFILE))
+           (.schedule timer
+                      (proxy [java.util.TimerTask] []
+                        (run []
+                          (.runOnUiThread activity dim-ui)))
+                      1000)))))))
 
 
 (defn make-double-tap-handler

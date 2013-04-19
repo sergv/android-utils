@@ -113,13 +113,12 @@ on the Surface and whose results will not be preserved."
 (defn -surfaceDestroyed [^android.clojure.IndependentDrawer this
                          ^SurfaceHolder holder]
   (reset! (.surface-available? ^DrawerState (.state this)) false)
-  (loop []
-    (when (not (try
-                 (.join ^Thread @(.drawing-thread ^DrawerState (.state this)))
-                 true
-                 (catch InterruptedException e
-                   false)))
-      (recur))))
+  (while (not (try
+                (.join ^Thread @(.drawing-thread ^DrawerState (.state this)))
+                true
+                (catch InterruptedException e
+                  false)))
+    (recur)))
 
 
 (defmacro ^{:private true} with-canvas
@@ -167,52 +166,51 @@ not be preserved."
            (Thread/sleep 25 0)
            (recur)))
        (log "Drawing thread's ready to draw")
-       (loop []
-         (when @(.surface-available? ^DrawerState (.state this))
-           ;; note: if exceptions happens when we're processing this message -
-           ;; let it be, it's removed from queue here and there's no other
-           ;; way around. If you try other ways around make sure they're
-           ;; correct with respect to concurrent clear-drawing-queue invokations
-           (if-let [msg (.poll msg-queue)]
-             (case (msg :type)
-               :plain
-               (let [{:keys [actions after-actions]} msg]
-                 (with-canvas canvas this
-                   (not (nil? actions))
-                   (call-on-func-or-func-seq #(% canvas) actions)
-                   (call-on-func-or-func-seq #(% canvas) after-actions)))
-               :animation
-               ;; if type is :animation then anim-actions and anim-after-actions are
-               ;; sequences of functions of two argumetns:
-               ;; canvas and $$ t \in \left[ 0, 1 \right] $$
-               (let [{:keys [anim-actions anim-after-actions duration pause-time]}
-                     msg
-                     start-time (System/currentTimeMillis)]
-                 (with-canvas canvas this
-                   (not (nil? anim-actions))
-                   (call-on-func-or-func-seq #(% canvas 0) anim-actions)
-                   (call-on-func-or-func-seq #(% canvas 0) anim-after-actions))
-                 (Thread/sleep pause-time 0)
-                 (loop []
-                   (let [curr-time (System/currentTimeMillis)
-                         diff (- curr-time start-time)]
-                     (assert (<= 0 diff))
-                     (when (< diff duration)
-                       (with-canvas canvas this
-                         (not (nil? anim-actions))
-                         (call-on-func-or-func-seq #(% canvas (/ diff duration))
-                                                   anim-actions)
-                         (call-on-func-or-func-seq #(% canvas (/ diff duration))
-                                                   anim-after-actions))
-                       (Thread/sleep pause-time 0)
-                       (recur))))
-                 (with-canvas canvas this
-                   (not (nil? anim-actions))
-                   (call-on-func-or-func-seq #(% canvas 1) anim-actions)
-                   (call-on-func-or-func-seq #(% canvas 1) anim-after-actions))
-                 (Thread/sleep pause-time 0)))
-             (Thread/sleep 100 0))
-           (recur)))
+       (while @(.surface-available? ^DrawerState (.state this))
+         ;; note: if exceptions happens when we're processing this message -
+         ;; let it be, it's removed from queue here and there's no other
+         ;; way around. If you try other ways around make sure they're
+         ;; correct with respect to concurrent clear-drawing-queue invokations
+         (if-let [msg (.poll msg-queue)]
+           (case (msg :type)
+             :plain
+             (let [{:keys [actions after-actions]} msg]
+               (with-canvas canvas this
+                 (not (nil? actions))
+                 (call-on-func-or-func-seq #(% canvas) actions)
+                 (call-on-func-or-func-seq #(% canvas) after-actions)))
+             :animation
+             ;; if type is :animation then anim-actions and anim-after-actions are
+             ;; sequences of functions of two argumetns:
+             ;; canvas and $$ t \in \left[ 0, 1 \right] $$
+             (let [{:keys [anim-actions anim-after-actions duration pause-time]}
+                   msg
+                   start-time (System/currentTimeMillis)]
+               (with-canvas canvas this
+                 (not (nil? anim-actions))
+                 (call-on-func-or-func-seq #(% canvas 0) anim-actions)
+                 (call-on-func-or-func-seq #(% canvas 0) anim-after-actions))
+               (Thread/sleep pause-time 0)
+               (loop []
+                 (let [curr-time (System/currentTimeMillis)
+                       diff (- curr-time start-time)]
+                   (assert (<= 0 diff))
+                   (when (< diff duration)
+                     (with-canvas canvas this
+                       (not (nil? anim-actions))
+                       (call-on-func-or-func-seq #(% canvas (/ diff duration))
+                                                 anim-actions)
+                       (call-on-func-or-func-seq #(% canvas (/ diff duration))
+                                                 anim-after-actions))
+                     (Thread/sleep pause-time 0)
+                     (recur))))
+               (with-canvas canvas this
+                 (not (nil? anim-actions))
+                 (call-on-func-or-func-seq #(% canvas 1) anim-actions)
+                 (call-on-func-or-func-seq #(% canvas 1) anim-after-actions))
+               (Thread/sleep pause-time 0)))
+           (Thread/sleep 100 0))
+         (recur))
        (log "Drawing thread dies"))
      (format "Independent drawer thread, %s" this))))
 
