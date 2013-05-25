@@ -26,7 +26,6 @@
                           (.runOnUiThread activity dim-ui)))
                       1000)))))))
 
-
 (defn make-double-tap-handler
   ([f]
      (make-double-tap-handler f 500))
@@ -52,3 +51,15 @@
                  :else
                  false))))))
 
+;; (defn make-async-task [^Activity activity
+;;                        on-start
+;;                        update
+;;                        on-end]
+;;   (let [run-on-ui-thread (fn [action]
+;;                            (. activity runOnUiThread action))]
+;;     (fn []
+;;       (run-on-ui-thread on-start)
+;;       (doseq [i (take 10 (range))]
+;;         (Thread/sleep 25 0)
+;;         (run-on-ui-thread update))
+;;       (run-on-ui-thread on-end))))

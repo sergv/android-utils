@@ -25,6 +25,12 @@
     (.setStrokeWidth new-paint new-width)
     new-paint))
 
+(defn adjust-style ^Paint [^Paint p
+                           ^android.graphics.Paint$Style new-style]
+  (let [new-paint (Paint. p)]
+    (.setStyle new-paint new-style)
+    new-paint))
+
 (defmacro with-saved-matrix [canvas-var & body]
   `(try
      (.save ^Canvas ~canvas-var Canvas/MATRIX_SAVE_FLAG)
@@ -37,8 +43,8 @@
           (not (nil? paint))
           (not (nil? label-paint))]}
   [^Canvas canvas
-   x-labels
-   y-labels
+   x-labels ;; seq of strings
+   y-labels ;; seq of strings
    ^Paint paint
    ^Paint label-paint]
   (let [width  (.getWidth canvas)
