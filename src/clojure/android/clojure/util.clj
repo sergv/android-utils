@@ -51,6 +51,28 @@
                  :else
                  false))))))
 
+(defmacro defrecord* [record-name fields & defrecord-opts]
+  (let [field-accessors
+        (map (fn [field-name]
+               (let [type (:tag (meta field-name))
+                     record-var (with-meta (gensym "var")
+                                  {:tag record-name})
+                     field-ref (symbol (str "." field-name))]
+                 `(defn ~field-name
+                    ~(with-meta
+                       (vector record-var)
+                       {:tag type
+                        ;; doesn't work yet
+                        ;; :inline
+                        ;; (with-meta (eval `(fn [var#] (list (quote ~field-ref) var#)))
+                        ;;   {:tag type})
+                        })
+                    (~field-ref ~record-var))))
+             fields)]
+    `(do
+       (defrecord ~record-name ~fields ~@defrecord-opts)
+       ~@field-accessors)))
+
 ;; (defn make-async-task [^Activity activity
 ;;                        on-start
 ;;                        update
