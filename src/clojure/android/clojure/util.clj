@@ -1,5 +1,6 @@
 (ns android.clojure.util
-  (:import [android.app Activity]
+  (:import [android.R]
+           [android.app Activity]
            [android.view View MotionEvent]
 
            [java.util.Timer]
@@ -72,6 +73,34 @@
     `(do
        (defrecord ~record-name ~fields ~@defrecord-opts)
        ~@field-accessors)))
+
+(defmacro android-resource
+  ([id] `(resource :id ~id))
+  ([resource-type resource-name]
+     `(. ~(case resource-type
+            :anim         android.R$anim
+            :animator     android.R$animator
+            :array        android.R$array
+            :attr         android.R$attr
+            :bool         android.R$bool
+            :color        android.R$color
+            :dimen        android.R$dimen
+            :drawable     android.R$drawable
+            :fraction     android.R$fraction
+            :id           android.R$id
+            :integer      android.R$integer
+            :interpolator android.R$interpolator
+            :layout       android.R$layout
+            :menu         android.R$menu
+            :mipmap       android.R$mipmap
+            :plurals      android.R$plurals
+            :raw          android.R$raw
+            :string       android.R$string
+            :style        android.R$style
+            :xml          android.R$xml
+            (throw (RuntimeException.
+                    (str "invalid android resource type: " resource-type))))
+         ~(symbol (name resource-name)))))
 
 ;; (defn make-async-task [^Activity activity
 ;;                        on-start
