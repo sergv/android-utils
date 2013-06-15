@@ -3,29 +3,16 @@
            [android.app Activity]
            [android.view View MotionEvent]
 
+           [android.clojure AndroidUtils]
+
            [java.util.Timer]
            [java.util.TimerTask]))
 
 
-(defn make-ui-dimmer [^Activity activity
-                      ^View view]
-  (let [dim-ui (fn []
-                 (.setSystemUiVisibility view
-                                         View/SYSTEM_UI_FLAG_LOW_PROFILE))
-        timer (java.util.Timer.)]
-    (dim-ui)
-    (.setOnSystemUiVisibilityChangeListener
-     view
-     (reify
-       android.view.View$OnSystemUiVisibilityChangeListener
-       (onSystemUiVisibilityChange [this global-visibility-flags]
-         (when (= 0 (bit-and global-visibility-flags
-                             View/SYSTEM_UI_FLAG_LOW_PROFILE))
-           (.schedule timer
-                      (proxy [java.util.TimerTask] []
-                        (run []
-                          (.runOnUiThread activity dim-ui)))
-                      1000)))))))
+(defn make-ui-dimmer
+  "Note: care should be taken to call this on activity's ui thread."
+  [^View view]
+  (AndroidUtils/make_ui_dimmer view))
 
 (defn make-double-tap-handler
   ([f]
