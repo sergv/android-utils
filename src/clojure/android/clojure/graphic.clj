@@ -31,6 +31,12 @@
     (.setStyle new-paint new-style)
     new-paint))
 
+(defn adjust-stroke-cap ^Paint [^Paint p
+                                ^android.graphics.Paint$Cap new-cap]
+  (let [new-paint ^Paint (Paint. p)]
+    (.setStrokeCap new-paint new-cap)
+    new-paint))
+
 (defmacro with-saved-matrix [canvas-var & body]
   `(try
      (.save ^Canvas ~canvas-var Canvas/MATRIX_SAVE_FLAG)

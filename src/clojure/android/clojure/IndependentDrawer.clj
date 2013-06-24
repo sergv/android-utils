@@ -186,7 +186,8 @@ not be preserved."
             ~after-action)
           (finally
             (.. ~surface-view (getHolder) (unlockCanvasAndPost surface-canvas#))))
-        (log "Unexpected error: lockCanvas returned nil"))))
+        ;; if it returned nil we have nothing to do
+        (log "Drawing thread: lockCanvas returned nil"))))
 
 (defmacro ^{:private true} call-on-func-or-func-seq [f func-or-coll]
   `(when ~func-or-coll
@@ -195,6 +196,11 @@ not be preserved."
        (doseq [item# ~func-or-coll]
          (~f item#)))))
 
+(defmacro ^{:private true} measure-frame-time [msg & body]
+  `(let [frame-start-time# (System/currentTimeMillis)]
+     ~@body
+     (log ~msg (- (System/currentTimeMillis) frame-start-time#))))
+
 (defn- ^Thread make-drawing-thread [^android.clojure.IndependentDrawer this]
   (let [msg-queue (message-queue @this)]
     (Thread.
@@ -202,7 +208,7 @@ not be preserved."
        (log "Drawing thread's born")
        ;; Wait while surfaceChanged will set up drawing canvas for us.
        (while (not (drawing-canvas @this))
-           (Thread/sleep 25 0))
+         (Thread/sleep 25 0))
        (log "Drawing thread's ready to draw")
        (while (surface-available? @this)
          ;; note: If exceptions happens when we're processing this message -
@@ -210,39 +216,49 @@ not be preserved."
          ;; way around. If you try other ways around make sure they're
          ;; correct with respect to concurrent clear-drawing-queue invokations.
          (if-let [msg (.poll msg-queue)]
-           (case (msg :type)
-             :plain
-             (let [{:keys [actions after-actions]} msg]
-               (with-canvas canvas this
-                 (call-on-func-or-func-seq #(% canvas) actions)
-                 (call-on-func-or-func-seq #(% canvas) after-actions)))
-             :animation
-             ;; If type is :animation then anim-actions and anim-after-actions are
-             ;; sequences of functions of two arguments:
-             ;; a canvas and $$ t \in \left[ 0, 1 \right] $$.
-             (let [{:keys [anim-actions anim-after-actions duration pause-time]}
-                   msg
-                   start-time (System/currentTimeMillis)]
-               (with-canvas canvas this
-                 (call-on-func-or-func-seq #(% canvas 0) anim-actions)
-                 (call-on-func-or-func-seq #(% canvas 0) anim-after-actions))
-               (Thread/sleep pause-time 0)
-               (loop []
-                 (let [curr-time (System/currentTimeMillis)
-                       diff (- curr-time start-time)]
-                   (assert (<= 0 diff))
-                   (when (< diff duration)
-                     (with-canvas canvas this
-                       (call-on-func-or-func-seq #(% canvas (/ diff duration))
-                                                 anim-actions)
-                       (call-on-func-or-func-seq #(% canvas (/ diff duration))
-                                                 anim-after-actions))
-                     (Thread/sleep pause-time 0)
-                     (recur))))
-               (with-canvas canvas this
-                 (call-on-func-or-func-seq #(% canvas 1) anim-actions)
-                 (call-on-func-or-func-seq #(% canvas 1) anim-after-actions))
-               (Thread/sleep pause-time 0)))
+           (do
+             (case (msg :type)
+               :plain
+               (let [{:keys [actions after-actions]} msg]
+                 (measure-frame-time
+                  "Drawing thread, plain frame took %s ms"
+                  (with-canvas canvas this
+                    (call-on-func-or-func-seq #(% canvas) actions)
+                    (call-on-func-or-func-seq #(% canvas) after-actions))))
+               :animation
+               ;; If type is :animation then anim-actions and anim-after-actions are
+               ;; sequences of functions of two arguments:
+               ;; a canvas and $$ t \in \left[ 0, 1 \right] $$.
+               (let [{:keys [anim-actions anim-after-actions duration pause-time]}
+                     msg
+                     start-time (System/currentTimeMillis)]
+                 (when-not (= 0 duration)
+                   (measure-frame-time
+                    "Drawing thread, animation frame took %s ms"
+                    (with-canvas canvas this
+                      (call-on-func-or-func-seq #(% canvas 0) anim-actions)
+                      (call-on-func-or-func-seq #(% canvas 0) anim-after-actions)))
+                   (Thread/sleep pause-time 0)
+                   (loop []
+                     (let [curr-time (System/currentTimeMillis)
+                           diff (- curr-time start-time)]
+                       (assert (<= 0 diff))
+                       (when (< diff duration)
+                         (measure-frame-time
+                          "Drawing thread, animation frame took %s ms"
+                          (with-canvas canvas this
+                            (call-on-func-or-func-seq #(% canvas (/ diff duration))
+                                                      anim-actions)
+                            (call-on-func-or-func-seq #(% canvas (/ diff duration))
+                                                      anim-after-actions)))
+                         (Thread/sleep pause-time 0)
+                         (recur)))))
+                 (measure-frame-time
+                  "Drawing thread, animation frame took %s ms"
+                  (with-canvas canvas this
+                    (call-on-func-or-func-seq #(% canvas 1) anim-actions)
+                    (call-on-func-or-func-seq #(% canvas 1) anim-after-actions)))
+                 (Thread/sleep pause-time 0))))
            (Thread/sleep 100 0)))
        (log "Drawing thread dies"))
      (format "Independent drawer thread, %s" this))))
