@@ -14,13 +14,13 @@ drawing commands invokations.
 
 Other type of drawing commands is commands that will be executed
 on the Surface and whose results will not be preserved."
-  (:gen-class :main no
+  (:gen-class :main false
               :name android.clojure.IndependentDrawer
               :extends android.view.SurfaceView
               :implements [clojure.lang.IDeref
                            android.view.SurfaceHolder$Callback]
               :state state
-              :init drawer-init
+              :init ^{:tag DrawerState} drawer-init
               :post-init drawer-post-init)
   (:import [android.content Context]
            [android.graphics Bitmap Canvas Color Paint Rect]
@@ -214,7 +214,7 @@ not be preserved."
          ;; note: If exceptions happens when we're processing this message -
          ;; let it be, it's removed from queue here and there's no other
          ;; way around. If you try other ways around make sure they're
-         ;; correct with respect to concurrent clear-drawing-queue invokations.
+         ;; correct with respect to concurrent clear-drawing-queue! invokations.
          (if-let [msg (.poll msg-queue)]
            (do
              (case (msg :type)
