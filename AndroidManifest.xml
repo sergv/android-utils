@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
           package="android.clojure"
           android:versionCode="1"
-          android:versionName="0.5.0-release">
+          android:versionName="0.7.0">
     <uses-sdk android:minSdkVersion="10"
               android:targetSdkVersion="15"
               android:maxSdkVersion="17"/>

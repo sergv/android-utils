@@ -5,6 +5,8 @@
 
            [android.clojure AndroidUtils]
 
+           [java.io
+            PrintWriter StringWriter]
            [java.util.Timer]
            [java.util.TimerTask]))
 
@@ -45,16 +47,21 @@
                (let [type (:tag (meta field-name))
                      record-var (with-meta (gensym "var")
                                   {:tag record-name})
-                     field-ref (symbol (str "." field-name))]
+                     field-ref (symbol (str "." field-name))
+                     ;; inline-func (with-meta ;; (fn [var] `((quote ~field-ref) ~var))
+                     ;;               (eval `(fn [var#]
+                     ;;                        (list (quote ~field-ref) var#)))
+                     ;;               {:tag type})
+                     ]
                  `(defn ~field-name
                     ~(with-meta
                        (vector record-var)
                        {:tag type
                         ;; doesn't work yet
                         ;; :inline
-                        ;; (with-meta (eval `(fn [var#] (list (quote ~field-ref) var#)))
-                        ;;   {:tag type})
+                        ;; inline-func
                         })
+                    ;; (list (quote ~field-ref) ^{:tag record-name} ~record-var)
                     (~field-ref ~record-var))))
              fields)]
     `(do
@@ -88,6 +95,16 @@
             (throw (RuntimeException.
                     (str "invalid android resource type: " resource-type))))
          ~(symbol (name resource-name)))))
+
+(defn extract-stacktrace [^Exception e]
+  (try
+    (let [sw (StringWriter.)
+          pw (PrintWriter. sw)]
+      (.printStackTrace e pw)
+      (str sw))
+    (catch Exception extract-exception
+      (str "Erorr while extracting stacktrace:\n"
+           extract-exception))))
 
 ;; (defn make-async-task [^Activity activity
 ;;                        on-start
