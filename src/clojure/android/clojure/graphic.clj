@@ -5,19 +5,12 @@
 
 (ns android.clojure.graphic
   (:import [android.graphics Bitmap Canvas Color Matrix Paint Rect]
-           [android.util.Log]))
+           [android.util.Log])
+  (:use [android.clojure.graphic_utils]))
 
 (defn- log
   ([msg] (android.util.Log/d "graphic.clj" msg))
   ([msg & args] (log (apply format msg args))))
-
-(defn ^Paint color->paint
-  ([argb]
-     (let [p (Paint.)]
-       (.setColor p argb)
-       p))
-  ([alpha red green blue]
-     (color->paint (Color/argb alpha red green blue))))
 
 (defn adjust-stroke-width ^Paint [^Paint p
                                   new-width]
@@ -36,13 +29,6 @@
   (let [new-paint ^Paint (Paint. p)]
     (.setStrokeCap new-paint new-cap)
     new-paint))
-
-(defmacro with-saved-matrix [canvas-var & body]
-  `(try
-     (.save ^Canvas ~canvas-var Canvas/MATRIX_SAVE_FLAG)
-     ~@body
-     (finally
-       (.restore ^Canvas ~canvas-var))))
 
 (defn draw-grid
   ^{:pre [(not (nil? canvas))
@@ -80,13 +66,13 @@
 
 ;; old data for 4-fields transformation
 ;; Corresponds to transformation matrix:
-;; $$[[;+]] \begin{math} T = \begin{bmatrix}
+;; $$[[strip-comments]] \begin{math} T = \begin{bmatrix}
 ;;   \text{scale-x} & 0              & \text{offset-x}\\
 ;;   0              & \text{scale-y} & \text{offset-y}\\
 ;;   0              & 0              & 1\\
 ;; \end{bmatrix}\end{math} $$
 ;; The inverse would be:
-;; $$[[;+]] \begin{math} T^{-1} = \begin{bmatrix}
+;; $$[[strip-comments]] \begin{math} T^{-1} = \begin{bmatrix}
 ;;   \frac{1}{\text{scale-x}} & 0                        & \frac{- \text{offset-x}}{\text{scale-x}}\\
 ;;   0                        & \frac{1}{\text{scale-y}} & \frac{- \text{offset-y}}{\text{scale-y}}\\
 ;;   0                        & 0                        & 1\\
@@ -96,7 +82,7 @@
 ;; $$ \text{scale-x}, \text{scale-y}, \text{offset-x}, \text{offset-y} \in \mathbb{Q} $$
 ;;
 ;; Transformation composition:
-;; $$[[;+]] \begin{math}
+;; $$[[strip-comments]] \begin{math}
 ;; \begin{bmatrix}
 ;;   \text{scale-x}_A & 0                & \text{offset-x}_A\\
 ;;   0                & \text{scale-y}_A & \text{offset-y}_A\\
@@ -107,19 +93,20 @@
 ;;   \text{scale-x}_B & 0                & \text{offset-x}_B\\
 ;;   0                & \text{scale-y}_B & \text{offset-y}_B\\
 ;;   0                & 0                & 1\\
-;; \end{bmatrix}\end{math}$$
+;; \end{bmatrix}\end{math}
+;; $$
 ;;
 ;;
 ;; for matrix transformation
 ;; Corresponds to transformation matrix:
-;; $$[[;+]] \begin{math} T = \begin{bmatrix}
+;; $$[[strip-comments]] \begin{math} T = \begin{bmatrix}
 ;;   a_{1 1} & a_{1 2} & a_{1 3}\\
 ;;   a_{2 1} & a_{2 2} & a_{2 3}\\
 ;;   a_{3 1} & a_{3 2} & a_{3 3}\\
 ;; \end{bmatrix}\end{math} $$
 ;;
 ;; The inverse would be
-;; $$[[;+]] \begin{math} T = \begin{bmatrix}
+;; $$[[strip-comments]] \begin{math} T = \begin{bmatrix}
 ;; \end{bmatrix}\end{math} $$
 (defrecord Transformation [a11 a12 a13
                            a21 a22 a23
